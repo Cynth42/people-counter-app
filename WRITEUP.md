@@ -74,15 +74,15 @@ The SSD MobileNet V2 COCO model worked well with this application so I ended up 
 
 ### Model size
 
-                        SSD MobileNet V2 COCO	 ----------- SSD Inception V2 COCO ----------   SSD MobileNet V1 COCO
-Before Conversion	--------   69.7 MB ----------------------     103 MB ----------------------      29 MB
-After Conversion	--------   65 MB	-----------------------      97 MB ----------------------      27 MB
+                        SSD MobileNet V2 COCO	 ---- SSD Inception V2 COCO ---- SSD MobileNet V1 COCO
+Before Conversion	----      69.7 MB ----                   103 MB  ----            29 MB
+After Conversion	----      65 MB	  ----                     97 MB ----            27 MB
 
 ### Inference Time
 
-                        SSD MobileNet V2 COCO	 ------------ SSD Inception V2 COCO	----------- SSD MobileNet V1 COCO
-Before Conversion	-------    50 ms ---------------------------    150 ms ------------------------  55 ms
-After Conversion	-------    60 ms ---------------------------    155 ms ------------------------  60 ms
+                        SSD MobileNet V2 COCO ---- SSD Inception V2 COCO ---- SSD MobileNet V1 COCO
+Before Conversion	----    50 ms -----                  150 ms ----                 55 ms
+After Conversion	----    60 ms -----                  155 ms ----                 60 ms
 
 
 
