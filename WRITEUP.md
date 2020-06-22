@@ -70,7 +70,7 @@ And it's also very important to be able to convert custom layers because many de
 
 ## Comparing Model Performance:
 
-The SSD MobileNet V2 COCO model worked well with this application so I ended up using it. Here is how it compares to the two other models that did not with this APP:
+The SSD MobileNet V2 COCO model worked well with this application so I ended up using it. Here is how it compares to the two other models that did not work with this APP:
 
 ### Model size
 
