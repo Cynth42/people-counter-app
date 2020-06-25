@@ -19,6 +19,7 @@
  WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 """
 
+
 import os
 import sys
 import time
@@ -32,17 +33,34 @@ import paho.mqtt.client as mqtt
 from argparse import ArgumentParser
 from inference import Network
 
-# MQTT server environment variables: 1884
+# MQTT server environment variables
 HOSTNAME = socket.gethostname()
 IPADDRESS = socket.gethostbyname(HOSTNAME)
 MQTT_HOST = IPADDRESS
-MQTT_PORT = 3001 
+MQTT_PORT = 3001
 MQTT_KEEPALIVE_INTERVAL = 60
 
+
+def performance_counts(perf_count):
+    """
+    print information about layers of the model.
+    :param perf_count: Dictionary consists of status of the layers.
+    :return: None
+    """
+    print("{:<70} {:<15} {:<15} {:<15} {:<10}".format('name', 'layer_type',
+                                                      'exec_type', 'status',
+                                                      'real_time, us'))
+    for layer, stats in perf_count.items():
+        print("{:<70} {:<15} {:<15} {:<15} {:<10}".format(layer,
+                                                          stats['layer_type'],
+                                                          stats['exec_type'],
+                                                          stats['status'],
+                                                          stats['real_time']))
 
 def build_argparser():
     """
     Parse command line arguments.
+
     :return: command line arguments
     """
     parser = ArgumentParser()
@@ -63,27 +81,7 @@ def build_argparser():
     parser.add_argument("-pt", "--prob_threshold", type=float, default=0.5,
                         help="Probability threshold for detections filtering"
                         "(0.5 by default)")
-    parser.add_argument("-pc", "--perf_counts", type=str, default=False,
-                        help="Print performance counters")
     return parser
-
-
-def performance_counts(perf_count):
-    """
-    print information about layers of the model.
-    :param perf_count: Dictionary consists of status of the layers.
-    :return: None
-    """
-    print("{:<70} {:<15} {:<15} {:<15} {:<10}".format('name', 'layer_type',
-                                                      'exec_type', 'status',
-                                                      'real_time, us'))
-    for layer, stats in perf_count.items():
-        print("{:<70} {:<15} {:<15} {:<15} {:<10}".format(layer,
-                                                          stats['layer_type'],
-                                                          stats['exec_type'],
-                                                          stats['status'],
-                                                          stats['real_time']))
-
 
 def ssd_out(frame, result):
     """
@@ -105,33 +103,43 @@ def ssd_out(frame, result):
             current_count = current_count + 1
     return frame, current_count
 
-
-def main():
-    """
-    Load the network and parse the SSD output.
-    :return: None
-    """
-    # Connect to the MQTT server
+def connect_mqtt():
+    ### TODO: Connect to the MQTT client ###
     client = mqtt.Client()
     client.connect(MQTT_HOST, MQTT_PORT, MQTT_KEEPALIVE_INTERVAL)
+    return client
 
-    args = build_argparser().parse_args()
+def infer_on_stream(args, client):
+    """
+    Initialize the inference network, stream video to network,
+    and output stats and video.
 
-    # Flag for the input image
+    :param args: Command line arguments parsed by `build_argparser()`
+    :param client: MQTT client
+    :return: None
+    """
+    ### TODO: Load the model through `infer_network` ###
+     # Flag for the input image
     single_image_mode = False
 
     cur_request_id = 0
     last_count = 0
     total_count = 0
     start_time = 0
-
-    # Initialise the class
+    # Initialize the class
     infer_network = Network()
-    # Load the network to IE plugin to get shape of input layer
-    n, c, h, w = infer_network.load_model(args.model, args.device, 1, 1,
-                                          cur_request_id, args.cpu_extension)[1]
+    # Set Probability threshold for detections
+    #prob_threshold = args.prob_threshold
+    
+    # Initialize the Inference Engine
+    infer_network = Network()
 
-    # Checks for live feed
+    # Load the network model into the IE
+    n, c, h, w = infer_network.load_model(args.model, args.device, 1, 1,
+                                          cur_request_id,
+                                          args.cpu_extension)[1]
+    
+    # Checks for live feed- handle the input stream
     if args.input == 'CAM':
         input_stream = 0
 
@@ -144,7 +152,7 @@ def main():
     else:
         input_stream = args.input
         assert os.path.isfile(args.input), "Specified input file doesn't exist"
-
+    #Read from the video capture
     cap = cv2.VideoCapture(input_stream)
 
     if input_stream:
@@ -156,34 +164,43 @@ def main():
     prob_threshold = args.prob_threshold
     initial_w = cap.get(3)
     initial_h = cap.get(4)
+
     while cap.isOpened():
+        
         flag, frame = cap.read()
         if not flag:
             break
         key_pressed = cv2.waitKey(60)
-        # Start async inference
+        
+        # Pre-process the image as needed
         image = cv2.resize(frame, (w, h))
+        
         # Change data layout from HWC to CHW
         image = image.transpose((2, 0, 1))
         image = image.reshape((n, c, h, w))
-        # Start asynchronous inference for specified request.
-        inf_start = time.time()
-        infer_network.exec_net(cur_request_id, image)
-        # Wait for the result
-        if infer_network.wait(cur_request_id) == 0:
-            det_time = time.time() - inf_start
-            # Results of the output layer of the network
-            result = infer_network.get_output(cur_request_id)
-            if args.perf_counts:
-                perf_count = infer_network.performance_counter(cur_request_id)
-                performance_counts(perf_count)
 
+        #Start asynchronous inference for specified request
+        inf_start = time.time()
+ 
+        # Perform inference on the frame
+        infer_network.exec_net(cur_request_id, image)
+        #Wait for the result
+        if infer_network.wait(cur_request_id) == 0:
+            
+            det_time = time.time() - inf_start
+            #Get the results of the inference of the inference request
+            result = infer_network.get_output(cur_request_id)
+           
+            perf_count = infer_network.performance_counter(cur_request_id)
+            
             frame, current_count = ssd_out(frame, result)
+            
             inf_time_message = "Inference time: {:.3f}ms"\
                                .format(det_time * 1000)
+            
             cv2.putText(frame, inf_time_message, (15, 15),
                         cv2.FONT_HERSHEY_COMPLEX, 0.5, (200, 10, 10), 1)
-
+            
             # When new person enters the video
             if current_count > last_count:
                 start_time = time.time()
@@ -194,32 +211,36 @@ def main():
             if current_count < last_count:
                 duration = int(time.time() - start_time)
                 # Publish messages to the MQTT server
-                client.publish("person/duration",
-                               json.dumps({"duration": duration}))
+                client.publish("person/duration", json.dumps({"duration": duration}))
 
             client.publish("person", json.dumps({"count": current_count}))
             last_count = current_count
 
-            if key_pressed == 27:
-                break
-
-        # Send frame to the ffmpeg server
-        sys.stdout.buffer.write(frame)  
+        #send the frame to the FFMPEG server
+        sys.stdout.buffer.write(frame)
         sys.stdout.flush()
-
+        
+        #Write an output image if ’single_image_mode
         if single_image_mode:
             cv2.imwrite('output_image.jpg', frame)
-    # Clean Up!        
-    cap.release()
-    cv2.destroyAllWindows()
-    client.disconnect()
-    infer_network.clean()
+
+def main():
+    """
+    Load the network and parse the output.
+
+    :return: None
+    """
+    # Grab command line args
+    args = build_argparser().parse_args()
+    # Connect to the MQTT server
+    client = connect_mqtt()
+    # Perform inference on the input stream
+    infer_on_stream(args, client)
 
 
 if __name__ == '__main__':
     main()
-    exit(0)
-
+    #exit(0)
 
 
 
